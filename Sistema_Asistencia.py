@@ -515,7 +515,7 @@ def server_error(e):
 # ==================== INICIALIZACIÓN ====================
 
 if __name__ == '__main__':
-    # Inicializar base de datos
+    # Inicializar base de datos local (solo si se ejecuta manualmente)
     init_db()
     print("✅ Base de datos inicializada")
     print(f"📍 Ubicación del restaurante: {RESTAURANT_LAT}, {RESTAURANT_LON}")
@@ -523,8 +523,5 @@ if __name__ == '__main__':
     print(f"⏱️  Expiración de QR: {QR_EXPIRATION_MINUTES} minutos")
     print(f"🔑 SECRET_KEY configurada: {'✅' if SECRET_KEY != 'prueba123' else '⚠️  Usar variable de entorno'}")
     
-    # Puerto dinámico para Render
-    port = int(os.environ.get('PORT', 5000))
-    
-    print(f"\n🚀 Iniciando servidor en puerto {port}...")
-    app.run(host='0.0.0.0', port=port, debug=False)
+    # Solo corre Flask directamente si estás en desarrollo
+    app.run(host='0.0.0.0', port=5000, debug=True)
