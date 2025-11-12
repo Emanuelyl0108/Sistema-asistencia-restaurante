@@ -20,7 +20,3 @@ services:
         value: 50
       - key: QR_EXPIRATION_MINUTES
         value: 5
-    disk:
-      name: asistencia-data
-      mountPath: /opt/render/project/src
-      sizeGB: 1
