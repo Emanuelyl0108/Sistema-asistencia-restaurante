@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Camera, MapPin, Clock, CheckCircle, XCircle, AlertTriangle, User, LogIn, LogOut, Wifi, WifiOff } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 
@@ -16,7 +16,7 @@ export default function AppMarcaje() {
   const [lastMarcajes, setLastMarcajes] = useState([]);
 
   // ✅ URL dinámica para producción
-  const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+  const API_URL = process.env.REACT_APP_API_URL;
 
   // Detectar token del QR en URL
   useEffect(() => {
@@ -43,9 +43,10 @@ export default function AppMarcaje() {
   // Cargar empleados
   useEffect(() => {
     fetchEmployees();
-  }, []);
+  }, [fetchEmployees]);
 
-  const fetchEmployees = async () => {
+
+  const fetchEmployees = useCallback(async () => {
     try {
       const response = await fetch(`${API_URL}/empleados`);
       const data = await response.json();
@@ -53,7 +54,8 @@ export default function AppMarcaje() {
     } catch (error) {
       console.error('Error cargando empleados:', error);
     }
-  };
+  }, [API_URL]);
+
 
   // Obtener ubicación GPS
   const getLocation = () => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Clock, MapPin, Wifi, WifiOff, AlertCircle, CheckCircle } from 'lucide-react';
 
 export default function PanelQR() {
@@ -12,7 +12,7 @@ export default function PanelQR() {
   const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
   
   // Generar nuevo QR
-  const generateQR = async () => {
+  const generateQR = useCallback(async () => {
     try {
       const response = await fetch(`${API_URL}/generar-qr`, {
         method: 'GET',
@@ -32,10 +32,10 @@ export default function PanelQR() {
       setErrorMsg('Error de conexión. Reintentando...');
       setIsOnline(false);
     }
-  };
+  }, [API_URL]);
 
   // Obtener marcajes recientes
-  const fetchRecentMarks = async () => {
+  const fetchRecentMarks = useCallback(async () => {
     try {
       const response = await fetch(`${API_URL}/marcajes/hoy`, {
         method: 'GET',
@@ -47,7 +47,7 @@ export default function PanelQR() {
     } catch (error) {
       console.error('Error obteniendo marcajes:', error);
     }
-  };
+  }, [API_URL]);
 
   // Inicialización
   useEffect(() => {
@@ -61,7 +61,7 @@ export default function PanelQR() {
       clearInterval(qrInterval);
       clearInterval(marksInterval);
     };
-  }, []);
+  }, [generateQR, fetchRecentMarks]);
 
   // Contador de tiempo
   useEffect(() => {
@@ -78,7 +78,7 @@ export default function PanelQR() {
     if (timeRemaining === 0) {
       generateQR();
     }
-  }, [timeRemaining]);
+  }, [timeRemaining, generateQR]);
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
