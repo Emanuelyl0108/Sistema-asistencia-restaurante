@@ -39,13 +39,7 @@ export default function AppMarcaje() {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
-
-  // Cargar empleados
-  useEffect(() => {
-    fetchEmployees();
-  }, [fetchEmployees]);
-
-
+// Cargar empleados
   const fetchEmployees = useCallback(async () => {
     try {
       const response = await fetch(`${API_URL}/empleados`);
@@ -55,6 +49,11 @@ export default function AppMarcaje() {
       console.error('Error cargando empleados:', error);
     }
   }, [API_URL]);
+
+  useEffect(() => {
+    fetchEmployees();
+  }, [fetchEmployees]);
+
 
 
   // Obtener ubicación GPS
