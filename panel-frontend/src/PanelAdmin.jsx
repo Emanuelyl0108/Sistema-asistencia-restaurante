@@ -15,17 +15,14 @@ export default function PanelAdmin() {
 
   const cargarDatos = async () => {
     try {
-      // Cargar estadísticas
       const statsRes = await fetch(`${API_URL}/admin/estadisticas`);
       const statsData = await statsRes.json();
       setStats(statsData);
 
-      // Cargar marcajes
       const marcajesRes = await fetch(`${API_URL}/admin/marcajes`);
       const marcajesData = await marcajesRes.json();
       setMarcajes(marcajesData);
 
-      // Cargar pendientes
       const pendRes = await fetch(`${API_URL}/admin/empleados/pendientes`);
       const pendData = await pendRes.json();
       setPendientes(pendData);
@@ -64,7 +61,6 @@ export default function PanelAdmin() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-6">
-      {/* Header */}
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-3xl font-bold text-white">Panel de Administrador</h1>
@@ -79,7 +75,6 @@ export default function PanelAdmin() {
         </a>
       </div>
 
-      {/* Navegación */}
       <div className="flex gap-4 mb-6">
         <button
           onClick={() => setSeccion('dashboard')}
@@ -118,7 +113,6 @@ export default function PanelAdmin() {
         </button>
       </div>
 
-      {/* Dashboard */}
       {seccion === 'dashboard' && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-gradient-to-br from-blue-500 to-blue-700 rounded-xl p-6 text-white">
@@ -141,7 +135,6 @@ export default function PanelAdmin() {
         </div>
       )}
 
-      {/* Marcajes */}
       {seccion === 'marcajes' && (
         <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
           <h2 className="text-2xl font-bold text-white mb-4">Historial de Marcajes</h2>
@@ -178,7 +171,6 @@ export default function PanelAdmin() {
         </div>
       )}
 
-      {/* Aprobaciones */}
       {seccion === 'aprobaciones' && (
         <div className="space-y-4">
           <h2 className="text-2xl font-bold text-white mb-4">Solicitudes Pendientes</h2>
