@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Clock, Users, TrendingUp, LogOut, CheckCircle, XCircle, Mail, Phone, IdCard } from 'lucide-react';
+import { User, Clock, Users, TrendingUp, LogOut, CheckCircle, Mail, Phone, IdCard } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_API_URL || 'https://asistencia-backend-uu7p.onrender.com/api';
 
@@ -188,7 +188,7 @@ export default function PanelAdmin() {
                     <h3 className="text-xl font-bold text-white mb-2">{emp.nombre}</h3>
                     <div className="space-y-1 text-white/70 text-sm">
                       <p className="flex items-center gap-2">
-                        <IdCard size={16} /> Cédula: {emp.cedula}
+                        <span>📋</span> Cédula: {emp.cedula}
                       </p>
                       <p className="flex items-center gap-2">
                         <Mail size={16} /> Email: {emp.email}
