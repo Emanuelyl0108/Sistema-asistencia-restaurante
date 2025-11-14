@@ -1,0 +1,11 @@
+
+# Variables de entorno
+.env
+.env.local
+.env.production
+
+# Base de datos
+*.db
+*.sqlite
+*.sqlite3
+empleados.csv

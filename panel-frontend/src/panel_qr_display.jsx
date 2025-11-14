@@ -9,7 +9,9 @@ export default function PanelQR() {
   const [recentMarks, setRecentMarks] = useState([]);
   const [errorMsg, setErrorMsg] = useState('');
 
-  const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+  // URLs de producción
+  const API_URL = process.env.REACT_APP_API_URL || 'https://asistencia-backend-uu7p.onrender.com/api';
+  const FRONTEND_URL = 'https://asistencia-restaurante.netlify.app';
   
   // Generar nuevo QR
   const generateQR = useCallback(async () => {
@@ -17,7 +19,6 @@ export default function PanelQR() {
       const response = await fetch(`${API_URL}/generar-qr`, {
         method: 'GET',
         mode: 'cors',
-        
       });
 
       const data = await response.json();
@@ -40,7 +41,7 @@ export default function PanelQR() {
       const response = await fetch(`${API_URL}/marcajes/hoy`, {
         method: 'GET',
         mode: 'cors',
-         });
+      });
       const data = await response.json();
       setRecentMarks(data.slice(0, 5));
       setIsOnline(true);
@@ -54,8 +55,8 @@ export default function PanelQR() {
     generateQR();
     fetchRecentMarks();
     
-    const qrInterval = setInterval(generateQR, 5 * 60 * 1000); // cada 5 minutos
-    const marksInterval = setInterval(fetchRecentMarks, 10000); // cada 10 segundos
+    const qrInterval = setInterval(generateQR, 5 * 60 * 1000);
+    const marksInterval = setInterval(fetchRecentMarks, 10000);
     
     return () => {
       clearInterval(qrInterval);
@@ -95,7 +96,6 @@ export default function PanelQR() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 text-white p-8">
-      {/* Header */}
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-8">
           <div>
@@ -132,21 +132,19 @@ export default function PanelQR() {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-8">
-          {/* Panel QR Principal */}
-          <div className="col-span-2">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2">
             <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-12 border border-white/20 shadow-2xl">
               <div className="text-center mb-8">
                 <h2 className="text-3xl font-bold mb-4">Escanea para marcar asistencia</h2>
                 <p className="text-xl opacity-80">Acerca tu celular al código QR</p>
               </div>
 
-              {/* QR Code Display */}
               <div className="flex justify-center mb-8">
                 {qrData ? (
                   <div className="bg-white p-8 rounded-2xl shadow-xl">
                     <img
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(`${window.location.origin}/marcar?token=${qrData.token}`)}`}
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(`${FRONTEND_URL}/marcar?token=${qrData.token}`)}`}
                       alt="QR Code"
                       className="w-96 h-96"
                     />
@@ -161,7 +159,6 @@ export default function PanelQR() {
                 )}
               </div>
 
-              {/* Countdown Timer */}
               <div className="space-y-4">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-lg opacity-80">Código válido por:</span>
@@ -190,7 +187,6 @@ export default function PanelQR() {
               )}
             </div>
 
-            {/* Instrucciones */}
             <div className="mt-6 bg-blue-500/20 backdrop-blur-lg rounded-2xl p-6 border border-blue-500/30">
               <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
                 <MapPin className="w-6 h-6" />
@@ -206,7 +202,6 @@ export default function PanelQR() {
             </div>
           </div>
 
-          {/* Panel de Marcajes Recientes */}
           <div className="space-y-6">
             <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
               <h3 className="text-2xl font-bold mb-6 flex items-center gap-2">
@@ -219,7 +214,7 @@ export default function PanelQR() {
                   recentMarks.map((mark, idx) => (
                     <div 
                       key={idx}
-                      className="bg-white/10 rounded-xl p-4 border border-white/10 hover:bg-white/20 transition-all animate-fadeIn"
+                      className="bg-white/10 rounded-xl p-4 border border-white/10 hover:bg-white/20 transition-all"
                     >
                       <div className="flex items-center justify-between mb-2">
                         <span className="font-semibold text-lg">{mark.empleado_nombre}</span>
@@ -256,7 +251,6 @@ export default function PanelQR() {
               </div>
             </div>
 
-            {/* Stats del día */}
             <div className="bg-gradient-to-br from-green-500/20 to-blue-500/20 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
               <h4 className="text-xl font-bold mb-4">📊 Estadísticas de Hoy</h4>
               
@@ -277,23 +271,6 @@ export default function PanelQR() {
           </div>
         </div>
       </div>
-
-      <style jsx>{`
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(-10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        .animate-fadeIn {
-          animation: fadeIn 0.5s ease-out;
-        }
-      `}</style>
     </div>
   );
 }

@@ -15,14 +15,14 @@ export default function AppMarcaje() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [lastMarcajes, setLastMarcajes] = useState([]);
 
-  // ✅ URL dinámica para producción
-  const API_URL = process.env.REACT_APP_API_URL;
+  const API_URL = process.env.REACT_APP_API_URL || 'https://asistencia-backend-uu7p.onrender.com/api';
 
   // Detectar token del QR en URL
   useEffect(() => {
     const token = searchParams.get('token');
     if (token) {
-      handleScanQR(token);
+      setQrToken(token);
+      setStep('select');
     }
   }, [searchParams]);
 
@@ -39,7 +39,8 @@ export default function AppMarcaje() {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
-// Cargar empleados
+
+  // Cargar empleados
   const fetchEmployees = useCallback(async () => {
     try {
       const response = await fetch(`${API_URL}/empleados`);
@@ -51,10 +52,10 @@ export default function AppMarcaje() {
   }, [API_URL]);
 
   useEffect(() => {
-    fetchEmployees();
-  }, [fetchEmployees]);
-
-
+    if (step === 'select') {
+      fetchEmployees();
+    }
+  }, [step, fetchEmployees]);
 
   // Obtener ubicación GPS
   const getLocation = () => {
@@ -82,11 +83,6 @@ export default function AppMarcaje() {
         }
       );
     });
-  };
-
-  const handleScanQR = (token) => {
-    setQrToken(token);
-    setStep('select');
   };
 
   const loadEmployeeMarcajes = async (nombre) => {
