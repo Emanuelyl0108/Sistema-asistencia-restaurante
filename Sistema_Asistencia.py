@@ -1,7 +1,7 @@
 """
 Sistema de Asistencia con QR Dinámico
 Backend API - Flask
-Optimizado para Render.com
+VERSIÓN COMPLETA con Panel Admin + Registro de Empleados
 """
 
 from flask import Flask, request, jsonify, send_from_directory
@@ -12,6 +12,9 @@ import sqlite3
 import pandas as pd
 import os
 import hashlib
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from math import radians, cos, sin, asin, sqrt
 
 app = Flask(__name__, static_folder='build', static_url_path='')
@@ -29,15 +32,21 @@ CORS(app,
         "supports_credentials": True
     }}
 )
+
 # ==================== CONFIGURACIÓN ====================
-# Variables de entorno (Render las inyecta automáticamente)
 SECRET_KEY = os.environ.get('SECRET_KEY', 'prueba123')
 QR_EXPIRATION_MINUTES = int(os.environ.get('QR_EXPIRATION_MINUTES', 5))
 GPS_RADIUS_METERS = int(os.environ.get('GPS_RADIUS_METERS', 50))
 
-# Coordenadas del restaurante (desde variables de entorno)
+# Coordenadas del restaurante
 RESTAURANT_LAT = float(os.environ.get('RESTAURANT_LAT', 5.618553712703385))
 RESTAURANT_LON = float(os.environ.get('RESTAURANT_LON', -73.81627418830061))
+
+# Configuración de Email (Gmail)
+EMAIL_SENDER = os.environ.get('EMAIL_SENDER', 'tu-email@gmail.com')
+EMAIL_PASSWORD = os.environ.get('EMAIL_PASSWORD', 'tu-app-password')
+ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'admin@enruanadosgourmet.com')
+
 # Horarios permitidos
 HORARIOS = {
     "cocina": {
@@ -51,20 +60,19 @@ HORARIOS = {
 }
 TOLERANCIA_SALIDA_MINUTOS = 40
 
-# Ruta de base de datos (persistente en Render con disco)
 DB_PATH = os.environ.get('DB_PATH', 'asistencia.db')
 
 # ==================== BASE DE DATOS ====================
 
 def get_db_connection():
     """Obtener conexión a la base de datos"""
-    conn = sqlite3.connect(DB_PATH)  # ← Usa DB_PATH en vez de 'asistencia.db'
+    conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 def init_db():
     """Inicializar base de datos SQLite"""
-    conn = get_db_connection()  # ← SOLO CAMBIA ESTA LÍNEA (antes era sqlite3.connect('asistencia.db'))
+    conn = get_db_connection()
     c = conn.cursor()
     
     # Tabla de marcajes
@@ -85,7 +93,25 @@ def init_db():
         )
     ''')
     
-    # Tabla de QR tokens (para invalidar si es necesario)
+    # Tabla de empleados
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS empleados (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT NOT NULL,
+            cedula TEXT UNIQUE NOT NULL,
+            email TEXT,
+            telefono TEXT,
+            rol TEXT NOT NULL,
+            estado TEXT DEFAULT 'PENDIENTE',
+            usuario_fudo TEXT,
+            password_fudo TEXT,
+            fecha_registro TEXT NOT NULL,
+            fecha_aprobacion TEXT,
+            aprobado_por TEXT
+        )
+    ''')
+    
+    # Tabla de QR tokens
     c.execute('''
         CREATE TABLE IF NOT EXISTS qr_tokens (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -96,7 +122,7 @@ def init_db():
         )
     ''')
     
-    # Tabla de intentos fallidos (para alertas)
+    # Tabla de intentos fallidos
     c.execute('''
         CREATE TABLE IF NOT EXISTS intentos_fallidos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -111,13 +137,11 @@ def init_db():
     
     conn.commit()
     conn.close()
+
 # ==================== FUNCIONES AUXILIARES ====================
 
 def calcular_distancia_gps(lat1, lon1, lat2, lon2):
-    """
-    Calcular distancia entre dos puntos GPS usando fórmula Haversine
-    Retorna distancia en metros
-    """
+    """Calcular distancia entre dos puntos GPS usando fórmula Haversine"""
     lon1, lat1, lon2, lat2 = map(radians, [lon1, lat1, lon2, lat2])
     dlon = lon2 - lon1
     dlat = lat2 - lat1
@@ -126,37 +150,102 @@ def calcular_distancia_gps(lat1, lon1, lat2, lon2):
     km = 6371 * c
     return km * 1000  # convertir a metros
 
-def verificar_horario_permitido(empleado_nombre, hora_actual):
-    """
-    Verificar si el empleado puede marcar en este horario
-    """
-    # Cargar empleados
+def generar_credenciales_fudo(nombre):
+    """Generar usuario y contraseña temporal para FUDO"""
+    import re
+    
+    # Limpiar nombre y crear usuario
+    nombre_limpio = re.sub(r'[^a-zA-Z\s]', '', nombre.lower())
+    nombre_usuario = nombre_limpio.replace(' ', '.')
+    
+    usuario = f"{nombre_usuario}@enruanadosgourmet.com"
+    password = f"Temp{datetime.datetime.now().year}!"
+    
+    return usuario, password
+
+def enviar_email_admin(empleado_data):
+    """Enviar email al administrador con credenciales FUDO del nuevo empleado"""
     try:
-        empleados_df = pd.read_csv('empleados.csv')
-        empleado = empleados_df[empleados_df['nombre'] == empleado_nombre]
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = f"🆕 Nuevo Empleado Registrado: {empleado_data['nombre']}"
+        msg['From'] = EMAIL_SENDER
+        msg['To'] = ADMIN_EMAIL
         
-        if empleado.empty:
-            return False, "Empleado no encontrado"
+        # HTML del email
+        html = f"""
+        <html>
+          <body style="font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px;">
+            <div style="max-width: 600px; margin: 0 auto; background-color: white; padding: 30px; border-radius: 10px;">
+              <h2 style="color: #6B46C1;">🆕 Nuevo Empleado Registrado</h2>
+              
+              <div style="background-color: #F3F4F6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <h3 style="margin-top: 0;">Datos del Empleado:</h3>
+                <p><strong>Nombre:</strong> {empleado_data['nombre']}</p>
+                <p><strong>Cédula:</strong> {empleado_data['cedula']}</p>
+                <p><strong>Email:</strong> {empleado_data['email']}</p>
+                <p><strong>Teléfono:</strong> {empleado_data['telefono']}</p>
+                <p><strong>Rol:</strong> {empleado_data['rol'].upper()}</p>
+              </div>
+        """
         
-        if empleado.iloc[0]['estado'] != 'ACTIVO':
-            return False, "Empleado no está activo"
+        if empleado_data['rol'] == 'mesero':
+            html += f"""
+              <div style="background-color: #EDE9FE; border-left: 4px solid #6B46C1; padding: 20px; margin: 20px 0;">
+                <h3 style="margin-top: 0; color: #6B46C1;">🔑 Credenciales FUDO Generadas:</h3>
+                <p><strong>Usuario:</strong> <code style="background-color: #F3F4F6; padding: 2px 6px; border-radius: 4px;">{empleado_data['usuario_fudo']}</code></p>
+                <p><strong>Contraseña Temporal:</strong> <code style="background-color: #F3F4F6; padding: 2px 6px; border-radius: 4px;">{empleado_data['password_fudo']}</code></p>
+                <p style="color: #DC2626; font-size: 14px;"><strong>⚠️ Acción Requerida:</strong> Crear esta cuenta manualmente en el sistema FUDO.</p>
+              </div>
+            """
+        
+        html += """
+              <p style="color: #6B7280; font-size: 14px; margin-top: 30px;">
+                Accede al panel de administración para aprobar o rechazar este registro.
+              </p>
+            </div>
+          </body>
+        </html>
+        """
+        
+        part = MIMEText(html, 'html')
+        msg.attach(part)
+        
+        # Enviar email
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            server.sendmail(EMAIL_SENDER, ADMIN_EMAIL, msg.as_string())
+        
+        return True
+    except Exception as e:
+        print(f"Error enviando email: {e}")
+        return False
+
+def verificar_horario_permitido(empleado_nombre, hora_actual):
+    """Verificar si el empleado puede marcar en este horario"""
+    try:
+        conn = get_db_connection()
+        empleado = conn.execute(
+            "SELECT * FROM empleados WHERE nombre = ? AND estado = 'ACTIVO'",
+            (empleado_nombre,)
+        ).fetchone()
+        conn.close()
+        
+        if not empleado:
+            return False, "Empleado no encontrado o no activo"
     except:
         return False, "Error al verificar empleado"
     
     # Determinar si es fin de semana
-    dia_semana = datetime.datetime.now().weekday()  # 0=lunes, 6=domingo
+    dia_semana = datetime.datetime.now().weekday()
     es_fin_semana = dia_semana >= 5
     
-    # Determinar tipo de horario (por ahora todos general, puedes agregar campo en empleados.csv)
-    tipo_horario = "general"  # o "cocina" según el rol del empleado
-    
+    tipo_horario = "general"
     horario_key = "fin_semana" if es_fin_semana else "lunes_viernes"
     horario = HORARIOS[tipo_horario][horario_key]
     
     hora_inicio = datetime.datetime.strptime(horario["inicio"], "%H:%M").time()
     hora_cierre = datetime.datetime.strptime(horario["cierre"], "%H:%M").time()
     
-    # Agregar tolerancia de salida
     cierre_con_tolerancia = (
         datetime.datetime.combine(datetime.date.today(), hora_cierre) + 
         datetime.timedelta(minutes=TOLERANCIA_SALIDA_MINUTOS)
@@ -170,43 +259,231 @@ def verificar_horario_permitido(empleado_nombre, hora_actual):
     
     return True, "Horario válido"
 
-def registrar_intento_fallido(empleado_nombre, motivo, lat, lon, dispositivo):
-    """Registrar intento fallido para análisis y alertas"""
-    conn = sqlite3.connect('asistencia.db')
-    c = conn.cursor()
-    
-    c.execute('''
-        INSERT INTO intentos_fallidos 
-        (empleado_nombre, motivo, timestamp, latitud, longitud, dispositivo)
-        VALUES (?, ?, ?, ?, ?, ?)
-    ''', (empleado_nombre, motivo, int(datetime.datetime.now().timestamp()), lat, lon, dispositivo))
-    
-    conn.commit()
-    conn.close()
-
 # ==================== ENDPOINTS API ====================
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
-    """Endpoint de salud para Render"""
+    """Endpoint de salud"""
     return jsonify({
         'status': 'healthy',
         'timestamp': datetime.datetime.now().isoformat(),
-        'config': {
-            'qr_expiration': QR_EXPIRATION_MINUTES,
-            'gps_radius': GPS_RADIUS_METERS,
-            'restaurant_location': f"{RESTAURANT_LAT}, {RESTAURANT_LON}"
-        }
+        'version': '2.0.0'
     })
+
+# ==================== AUTENTICACIÓN ADMIN ====================
+
+@app.route('/api/admin/login', methods=['POST', 'OPTIONS'])
+def admin_login():
+    if request.method == 'OPTIONS':
+        return '', 204
+    
+    data = request.json
+    usuario = data.get('usuario')
+    password = data.get('password')
+    
+    # Credenciales hardcodeadas (cambiar en producción por BD)
+    if usuario == 'admin' and password == 'admin2025':
+        token = jwt.encode({
+            'usuario': usuario,
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=8)
+        }, SECRET_KEY, algorithm='HS256')
+        
+        return jsonify({'success': True, 'token': token})
+    
+    return jsonify({'success': False, 'error': 'Credenciales inválidas'}), 401
+
+# ==================== REGISTRO DE EMPLEADOS ====================
+
+@app.route('/api/empleados/registrar', methods=['POST', 'OPTIONS'])
+def registrar_empleado():
+    if request.method == 'OPTIONS':
+        return '', 204
+    
+    data = request.json
+    nombre = data.get('nombre')
+    cedula = data.get('cedula')
+    email = data.get('email')
+    telefono = data.get('telefono')
+    rol = data.get('rol')
+    
+    # Validar campos requeridos
+    if not all([nombre, cedula, email, telefono, rol]):
+        return jsonify({'error': 'Todos los campos son requeridos'}), 400
+    
+    # Generar credenciales FUDO si es mesero
+    usuario_fudo = None
+    password_fudo = None
+    
+    if rol == 'mesero':
+        usuario_fudo, password_fudo = generar_credenciales_fudo(nombre)
+    
+    try:
+        conn = get_db_connection()
+        conn.execute('''
+            INSERT INTO empleados 
+            (nombre, cedula, email, telefono, rol, estado, usuario_fudo, password_fudo, fecha_registro)
+            VALUES (?, ?, ?, ?, ?, 'PENDIENTE', ?, ?, ?)
+        ''', (nombre, cedula, email, telefono, rol, usuario_fudo, password_fudo, 
+              datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+        conn.commit()
+        conn.close()
+        
+        # Enviar email al admin
+        empleado_data = {
+            'nombre': nombre,
+            'cedula': cedula,
+            'email': email,
+            'telefono': telefono,
+            'rol': rol,
+            'usuario_fudo': usuario_fudo,
+            'password_fudo': password_fudo
+        }
+        
+        enviar_email_admin(empleado_data)
+        
+        response = {
+            'success': True,
+            'mensaje': 'Registro enviado correctamente'
+        }
+        
+        if rol == 'mesero':
+            response['credenciales'] = {
+                'usuario': usuario_fudo,
+                'password': password_fudo
+            }
+        
+        return jsonify(response)
+        
+    except sqlite3.IntegrityError:
+        return jsonify({'error': 'Ya existe un empleado con esta cédula'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ==================== PANEL ADMIN - GESTIÓN ====================
+
+@app.route('/api/admin/empleados/pendientes', methods=['GET', 'OPTIONS'])
+def empleados_pendientes():
+    if request.method == 'OPTIONS':
+        return '', 204
+    
+    conn = get_db_connection()
+    empleados = conn.execute(
+        "SELECT * FROM empleados WHERE estado = 'PENDIENTE' ORDER BY fecha_registro DESC"
+    ).fetchall()
+    conn.close()
+    
+    return jsonify([dict(emp) for emp in empleados])
+
+@app.route('/api/admin/empleados/aprobar/<int:id>', methods=['POST', 'OPTIONS'])
+def aprobar_empleado(id):
+    if request.method == 'OPTIONS':
+        return '', 204
+    
+    try:
+        conn = get_db_connection()
+        conn.execute('''
+            UPDATE empleados 
+            SET estado = 'ACTIVO', 
+                fecha_aprobacion = ?,
+                aprobado_por = 'admin'
+            WHERE id = ?
+        ''', (datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), id))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True, 'mensaje': 'Empleado aprobado'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/empleados/rechazar/<int:id>', methods=['DELETE', 'OPTIONS'])
+def rechazar_empleado(id):
+    if request.method == 'OPTIONS':
+        return '', 204
+    
+    try:
+        conn = get_db_connection()
+        conn.execute("DELETE FROM empleados WHERE id = ?", (id,))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True, 'mensaje': 'Empleado rechazado'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/marcajes', methods=['GET', 'OPTIONS'])
+def admin_marcajes():
+    if request.method == 'OPTIONS':
+        return '', 204
+    
+    fecha_inicio = request.args.get('fecha_inicio')
+    fecha_fin = request.args.get('fecha_fin')
+    
+    conn = get_db_connection()
+    
+    if fecha_inicio and fecha_fin:
+        marcajes = conn.execute(
+            "SELECT * FROM marcajes WHERE fecha BETWEEN ? AND ? ORDER BY timestamp DESC",
+            (fecha_inicio, fecha_fin)
+        ).fetchall()
+    else:
+        # Por defecto últimos 30 días
+        hace_30 = (datetime.date.today() - datetime.timedelta(days=30)).strftime('%Y-%m-%d')
+        marcajes = conn.execute(
+            "SELECT * FROM marcajes WHERE fecha >= ? ORDER BY timestamp DESC",
+            (hace_30,)
+        ).fetchall()
+    
+    conn.close()
+    
+    return jsonify([dict(m) for m in marcajes])
+
+@app.route('/api/admin/estadisticas', methods=['GET', 'OPTIONS'])
+def admin_estadisticas():
+    if request.method == 'OPTIONS':
+        return '', 204
+    
+    conn = get_db_connection()
+    
+    # Empleados activos
+    empleados_activos = conn.execute(
+        "SELECT COUNT(*) as total FROM empleados WHERE estado = 'ACTIVO'"
+    ).fetchone()['total']
+    
+    # Marcajes hoy
+    hoy = datetime.date.today().strftime('%Y-%m-%d')
+    marcajes_hoy = conn.execute(
+        "SELECT COUNT(*) as total FROM marcajes WHERE fecha = ?",
+        (hoy,)
+    ).fetchone()['total']
+    
+    # Horas trabajadas (aproximado)
+    marcajes_mes = conn.execute(
+        "SELECT * FROM marcajes WHERE fecha >= ?",
+        ((datetime.date.today() - datetime.timedelta(days=30)).strftime('%Y-%m-%d'),)
+    ).fetchall()
+    
+    conn.close()
+    
+    # Calcular horas
+    horas_totales = 0
+    for m in marcajes_mes:
+        if m['tipo'] == 'salida':
+            # Buscar entrada correspondiente (simplificado)
+            horas_totales += 8  # Aproximado
+    
+    return jsonify({
+        'empleados_activos': empleados_activos,
+        'marcajes_hoy': marcajes_hoy,
+        'horas_trabajadas_mes': round(horas_totales, 1)
+    })
+
+# ==================== ENDPOINTS ORIGINALES (MANTENIDOS) ====================
 
 @app.route('/api/generar-qr', methods=['GET', 'OPTIONS'])
 def generar_qr():
     if request.method == 'OPTIONS':
         return '', 204
-    """
-    Generar nuevo token QR dinámico
-    Expira en QR_EXPIRATION_MINUTES minutos
-    """
+    
     now = datetime.datetime.utcnow()
     expires = now + datetime.timedelta(minutes=QR_EXPIRATION_MINUTES)
     
@@ -218,10 +495,8 @@ def generar_qr():
     
     token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
     
-    # Guardar en BD para tracking
-    conn = sqlite3.connect('asistencia.db')
-    c = conn.cursor()
-    c.execute('''
+    conn = get_db_connection()
+    conn.execute('''
         INSERT INTO qr_tokens (token, created_at, expires_at)
         VALUES (?, ?, ?)
     ''', (token, int(now.timestamp()), int(expires.timestamp())))
@@ -234,95 +509,68 @@ def generar_qr():
         'valid_for_seconds': QR_EXPIRATION_MINUTES * 60
     })
 
-@app.route('/api/validar-qr', methods=['POST', 'OPTIONS'])
-def validar_qr():
+@app.route('/api/empleados', methods=['GET', 'OPTIONS'])
+def listar_empleados():
     if request.method == 'OPTIONS':
         return '', 204
-    """
-    Validar QR escaneado por empleado
-    """
-    data = request.json
-    token = data.get('token')
     
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-        return jsonify({'valid': True, 'token_id': payload.get('token_id')})
-    except jwt.ExpiredSignatureError:
-        return jsonify({'valid': False, 'error': 'QR expirado'}), 400
-    except jwt.InvalidTokenError:
-        return jsonify({'valid': False, 'error': 'QR inválido'}), 400
+        conn = get_db_connection()
+        empleados = conn.execute(
+            "SELECT nombre FROM empleados WHERE estado = 'ACTIVO' ORDER BY nombre"
+        ).fetchall()
+        conn.close()
+        
+        return jsonify({
+            'empleados': [emp['nombre'] for emp in empleados]
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/marcar', methods=['POST', 'OPTIONS'])
 def marcar_asistencia():
     if request.method == 'OPTIONS':
         return '', 204
-    """
-    Registrar marcaje de entrada/salida
-    Valida: QR, GPS, horario, duplicados
-    """
+    
     data = request.json
     
-    # Validar campos requeridos
     required = ['token', 'empleado_nombre', 'tipo', 'latitud', 'longitud']
     if not all(k in data for k in required):
         return jsonify({'error': 'Datos incompletos'}), 400
     
     token = data['token']
     empleado_nombre = data['empleado_nombre']
-    tipo = data['tipo']  # 'entrada' o 'salida'
+    tipo = data['tipo']
     lat = float(data['latitud'])
     lon = float(data['longitud'])
     dispositivo = data.get('dispositivo', 'unknown')
     
-    # 1. Validar QR
+    # Validar QR
     try:
         jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-    except jwt.ExpiredSignatureError:
-        registrar_intento_fallido(empleado_nombre, "QR expirado", lat, lon, dispositivo)
-        return jsonify({'error': 'QR expirado. Escanea el código actualizado.'}), 400
-    except jwt.InvalidTokenError:
-        registrar_intento_fallido(empleado_nombre, "QR inválido", lat, lon, dispositivo)
-        return jsonify({'error': 'QR inválido'}), 400
+    except:
+        return jsonify({'error': 'QR inválido o expirado'}), 400
     
-    # 2. Validar ubicación GPS
+    # Validar GPS
     distancia = calcular_distancia_gps(lat, lon, RESTAURANT_LAT, RESTAURANT_LON)
     
     if distancia > GPS_RADIUS_METERS:
-        registrar_intento_fallido(empleado_nombre, f"Fuera de ubicación ({distancia:.0f}m)", lat, lon, dispositivo)
         return jsonify({
-            'error': f'Debes estar en el restaurante para marcar. Distancia: {distancia:.0f}m'
+            'error': f'Debes estar en el restaurante. Distancia: {distancia:.0f}m'
         }), 400
     
-    # 3. Validar horario
+    # Validar horario
     hora_actual = datetime.datetime.now().time()
     horario_valido, mensaje_horario = verificar_horario_permitido(empleado_nombre, hora_actual)
     
     if not horario_valido:
-        registrar_intento_fallido(empleado_nombre, mensaje_horario, lat, lon, dispositivo)
         return jsonify({'error': mensaje_horario}), 400
     
-    # 4. Validar duplicados (no marcar dos entradas seguidas sin salida)
-    conn = sqlite3.connect('asistencia.db')
-    c = conn.cursor()
-    
-    c.execute('''
-        SELECT tipo FROM marcajes 
-        WHERE empleado_nombre = ? 
-        ORDER BY timestamp DESC LIMIT 1
-    ''', (empleado_nombre,))
-    
-    ultimo_marcaje = c.fetchone()
-    
-    if ultimo_marcaje and ultimo_marcaje[0] == tipo:
-        conn.close()
-        return jsonify({
-            'error': f'Ya marcaste {tipo} anteriormente. Marca {"salida" if tipo == "entrada" else "entrada"}.'
-        }), 400
-    
-    # 5. Registrar marcaje
+    # Registrar marcaje
     now = datetime.datetime.now()
     
-    c.execute('''
+    conn = get_db_connection()
+    conn.execute('''
         INSERT INTO marcajes 
         (empleado_nombre, tipo, fecha, hora, timestamp, latitud, longitud, distancia_metros, dispositivo)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -348,185 +596,106 @@ def marcar_asistencia():
         'distancia': f'{distancia:.0f}m'
     })
 
-@app.route('/api/empleados', methods=['GET', 'OPTIONS'])
-def listar_empleados():
+# ==================== ENDPOINT INTEGRACIÓN NÓMINA ====================
+
+@app.route('/api/turnos/quincena', methods=['GET', 'OPTIONS'])
+def calcular_turnos_quincena():
+    """Calcular turnos trabajados en una quincena - Compatible con Gestor de Nómina"""
     if request.method == 'OPTIONS':
         return '', 204
-    """Obtener lista de empleados activos"""
-    try:
-        empleados_df = pd.read_csv('empleados.csv')
-        activos = empleados_df[empleados_df['estado'] == 'ACTIVO']
-        
-        return jsonify({
-            'empleados': activos['nombre'].tolist()
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/marcajes/hoy', methods=['GET', 'OPTIONS'])
-def marcajes_hoy():
-    if request.method == 'OPTIONS':
-        return '', 204
-    """Obtener marcajes del día actual"""
-    conn = sqlite3.connect('asistencia.db')
-    hoy = datetime.date.today().strftime('%Y-%m-%d')
     
-    df = pd.read_sql_query(
-        "SELECT * FROM marcajes WHERE fecha = ? ORDER BY timestamp DESC",
-        conn,
-        params=(hoy,)
-    )
-    
-    conn.close()
-    
-    return jsonify(df.to_dict('records'))
-
-@app.route('/api/marcajes/empleado/<nombre>', methods=['GET', 'OPTIONS'])
-def marcajes_empleado(nombre):
-    if request.method == 'OPTIONS':
-        return '', 204
-    """Obtener marcajes de un empleado (últimos 30 días)"""
-    conn = sqlite3.connect('asistencia.db')
-    
-    hace_30_dias = (datetime.date.today() - datetime.timedelta(days=30)).strftime('%Y-%m-%d')
-    
-    df = pd.read_sql_query(
-        "SELECT * FROM marcajes WHERE empleado_nombre = ? AND fecha >= ? ORDER BY timestamp DESC",
-        conn,
-        params=(nombre, hace_30_dias)
-    )
-    
-    conn.close()
-    
-    return jsonify(df.to_dict('records'))
-
-@app.route('/api/reporte/horas', methods=['GET'])
-def reporte_horas():
-    """
-    Generar reporte de horas trabajadas
-    Parámetros: fecha_inicio, fecha_fin, empleado (opcional)
-    """
-    fecha_inicio = request.args.get('fecha_inicio', (datetime.date.today() - datetime.timedelta(days=7)).strftime('%Y-%m-%d'))
-    fecha_fin = request.args.get('fecha_fin', datetime.date.today().strftime('%Y-%m-%d'))
-    empleado = request.args.get('empleado', None)
-    
-    conn = sqlite3.connect('asistencia.db')
-    
-    query = """
-        SELECT 
-            empleado_nombre,
-            fecha,
-            tipo,
-            hora,
-            timestamp
-        FROM marcajes 
-        WHERE fecha BETWEEN ? AND ?
-    """
-    params = [fecha_inicio, fecha_fin]
-    
-    if empleado:
-        query += " AND empleado_nombre = ?"
-        params.append(empleado)
-    
-    query += " ORDER BY empleado_nombre, timestamp"
-    
-    df = pd.read_sql_query(query, conn, params=params)
-    conn.close()
-    
-    # Calcular horas trabajadas
-    resultados = []
-    
-    for empleado_nombre in df['empleado_nombre'].unique():
-        df_emp = df[df['empleado_nombre'] == empleado_nombre]
-        
-        entradas = df_emp[df_emp['tipo'] == 'entrada']
-        salidas = df_emp[df_emp['tipo'] == 'salida']
-        
-        horas_totales = 0
-        dias_trabajados = []
-        
-        for fecha in df_emp['fecha'].unique():
-            df_dia = df_emp[df_emp['fecha'] == fecha]
-            
-            entrada = df_dia[df_dia['tipo'] == 'entrada']
-            salida = df_dia[df_dia['tipo'] == 'salida']
-            
-            if not entrada.empty and not salida.empty:
-                ts_entrada = entrada.iloc[0]['timestamp']
-                ts_salida = salida.iloc[-1]['timestamp']  # última salida del día
-                
-                horas = (ts_salida - ts_entrada) / 3600
-                horas_totales += horas
-                
-                dias_trabajados.append({
-                    'fecha': fecha,
-                    'entrada': entrada.iloc[0]['hora'],
-                    'salida': salida.iloc[-1]['hora'],
-                    'horas': round(horas, 2)
-                })
-        
-        resultados.append({
-            'empleado': empleado_nombre,
-            'total_horas': round(horas_totales, 2),
-            'total_dias': len(dias_trabajados),
-            'detalle': dias_trabajados
-        })
-    
-    return jsonify(resultados)
-
-@app.route('/api/exportar/csv', methods=['GET'])
-def exportar_csv():
-    """Exportar marcajes a CSV para integración con nómina"""
+    empleado = request.args.get('empleado')
     fecha_inicio = request.args.get('fecha_inicio')
     fecha_fin = request.args.get('fecha_fin')
     
-    conn = sqlite3.connect('asistencia.db')
+    if not all([empleado, fecha_inicio, fecha_fin]):
+        return jsonify({'error': 'Faltan parámetros'}), 400
     
-    query = "SELECT * FROM marcajes WHERE fecha BETWEEN ? AND ? ORDER BY empleado_nombre, timestamp"
-    df = pd.read_sql_query(query, conn, params=(fecha_inicio, fecha_fin))
-    
+    conn = get_db_connection()
+    marcajes = conn.execute('''
+        SELECT fecha, tipo, hora, timestamp
+        FROM marcajes 
+        WHERE empleado_nombre = ? AND fecha BETWEEN ? AND ?
+        ORDER BY timestamp
+    ''', (empleado, fecha_inicio, fecha_fin)).fetchall()
     conn.close()
     
-    # Guardar CSV
-    filename = f'asistencia_{fecha_inicio}_{fecha_fin}.csv'
-    df.to_csv(filename, index=False)
+    if not marcajes:
+        return jsonify({
+            'empleado': empleado,
+            'periodo': f"{fecha_inicio} a {fecha_fin}",
+            'dias_completos': 0,
+            'medios_turnos': 0,
+            'medios_adicionales': 0,
+            'dias_extras': 0,
+            'faltas': 15,
+            'detalle': []
+        })
+    
+    # Agrupar por día y calcular horas
+    dias_trabajados = {}
+    
+    for fecha in set(m['fecha'] for m in marcajes):
+        marcajes_dia = [m for m in marcajes if m['fecha'] == fecha]
+        
+        entradas = [m for m in marcajes_dia if m['tipo'] == 'entrada']
+        salidas = [m for m in marcajes_dia if m['tipo'] == 'salida']
+        
+        if entradas and salidas:
+            ts_entrada = entradas[0]['timestamp']
+            ts_salida = salidas[-1]['timestamp']
+            horas = (ts_salida - ts_entrada) / 3600
+            
+            # Clasificar turno
+            if horas >= 6:
+                tipo_turno = 'completo'
+            elif horas >= 3:
+                tipo_turno = 'medio'
+            else:
+                tipo_turno = 'incompleto'
+            
+            dias_trabajados[fecha] = {
+                'entrada': entradas[0]['hora'],
+                'salida': salidas[-1]['hora'],
+                'horas': round(horas, 2),
+                'tipo': tipo_turno
+            }
+    
+    # Calcular totales
+    dias_completos = sum(1 for d in dias_trabajados.values() if d['tipo'] == 'completo')
+    medios_turnos = sum(1 for d in dias_trabajados.values() if d['tipo'] == 'medio')
+    
+    dias_totales = len(dias_trabajados)
+    faltas = max(0, 15 - dias_totales - 2)  # 2 descansos permitidos
     
     return jsonify({
-        'success': True,
-        'filename': filename,
-        'registros': len(df)
+        'empleado': empleado,
+        'periodo': f"{fecha_inicio} a {fecha_fin}",
+        'dias_completos': dias_completos,
+        'medios_turnos': medios_turnos,
+        'medios_adicionales': 0,
+        'dias_extras': 0,
+        'faltas': faltas,
+        'detalle': dias_trabajados
     })
-# ==================== SERVIR REACT APP ====================
+
+# ==================== SERVIR FRONTEND ====================
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve(path):
-    """Servir React app en producción"""
     if path != "" and os.path.exists(app.static_folder + '/' + path):
         return send_from_directory(app.static_folder, path)
     else:
         return send_from_directory(app.static_folder, 'index.html')
 
-# ==================== MANEJO DE ERRORES ====================
-
-@app.errorhandler(404)
-def not_found(e):
-    return jsonify({'error': 'Endpoint no encontrado'}), 404
-
-@app.errorhandler(500)
-def server_error(e):
-    return jsonify({'error': 'Error interno del servidor'}), 500
-
 # ==================== INICIALIZACIÓN ====================
 
 if __name__ == '__main__':
-    # Inicializar base de datos local (solo si se ejecuta manualmente)
     init_db()
     print("✅ Base de datos inicializada")
     print(f"📍 Ubicación del restaurante: {RESTAURANT_LAT}, {RESTAURANT_LON}")
     print(f"🔒 Radio de validación: {GPS_RADIUS_METERS}m")
     print(f"⏱️  Expiración de QR: {QR_EXPIRATION_MINUTES} minutos")
-    print(f"🔑 SECRET_KEY configurada: {'✅' if SECRET_KEY != 'prueba123' else '⚠️  Usar variable de entorno'}")
     
-    # Solo corre Flask directamente si estás en desarrollo
     app.run(host='0.0.0.0', port=5000, debug=True)

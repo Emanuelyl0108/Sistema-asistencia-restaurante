@@ -318,44 +318,16 @@ export default function AppMarcaje() {
                   <div className="w-24 h-24 mx-auto mb-6 bg-green-500 rounded-full flex items-center justify-center animate-bounce">
                     <CheckCircle className="w-16 h-16" />
                   </div>
-                  <h2 className="text-3xl font-bold mb-4 text-green-400">
-                    ¡Éxito!
-                  </h2>
-                  <p className="text-xl mb-6">{result.mensaje}</p>
-                  
-                  <div className="space-y-3 mb-6 text-left bg-white/5 rounded-xl p-4">
-                    <div className="flex items-center justify-between">
-                      <span className="opacity-80">Hora:</span>
-                      <span className="font-bold text-lg">{result.hora}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="opacity-80">Distancia:</span>
-                      <span className="font-bold text-lg text-green-400">{result.distancia}</span>
-                    </div>
-                    {location && (
-                      <div className="flex items-center justify-between">
-                        <span className="opacity-80">Precisión GPS:</span>
-                        <span className="font-bold text-sm">{location.precision?.toFixed(0)}m</span>
-                      </div>
-                    )}
-                  </div>
+                  <h2 className="text-3xl font-bold mb-4">✅ {selectedEmployee}</h2>
+                  <p className="text-2xl font-bold text-green-400 mb-8">{marcajeType.toUpperCase()} registrada</p>
                 </>
               ) : (
                 <>
                   <div className="w-24 h-24 mx-auto mb-6 bg-red-500 rounded-full flex items-center justify-center">
                     <XCircle className="w-16 h-16" />
                   </div>
-                  <h2 className="text-3xl font-bold mb-4 text-red-400">
-                    Error
-                  </h2>
+                  <h2 className="text-3xl font-bold mb-4 text-red-400">Error</h2>
                   <p className="text-lg mb-6">{result?.error}</p>
-                  
-                  <div className="bg-red-500/20 border border-red-500/50 rounded-xl p-4 mb-6">
-                    <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-yellow-400" />
-                    <p className="text-sm opacity-80">
-                      Verifica que estés dentro del restaurante y que el código QR no haya expirado.
-                    </p>
-                  </div>
                 </>
               )}
 
