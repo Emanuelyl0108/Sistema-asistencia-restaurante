@@ -37,7 +37,7 @@ export default function PanelAdmin() {
         method: 'POST',
       });
       if (response.ok) {
-        alert(`✅ ${empleado.nombre} aprobado correctamente`);
+        alert(`Empleado ${empleado.nombre} aprobado correctamente`);
         cargarDatos();
       }
     } catch (error) {
@@ -51,7 +51,7 @@ export default function PanelAdmin() {
         method: 'DELETE',
       });
       if (response.ok) {
-        alert('❌ Empleado rechazado');
+        alert('Empleado rechazado');
         cargarDatos();
       }
     } catch (error) {
@@ -64,9 +64,9 @@ export default function PanelAdmin() {
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-3xl font-bold text-white">Panel de Administrador</h1>
-          <p className="text-purple-300">Gestión de asistencias</p>
+          <p className="text-purple-300">Gestion de asistencias</p>
         </div>
-        
+        <a
           href="/"
           className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg"
         >
@@ -188,13 +188,13 @@ export default function PanelAdmin() {
                     <h3 className="text-xl font-bold text-white mb-2">{emp.nombre}</h3>
                     <div className="space-y-1 text-white/70 text-sm">
                       <p className="flex items-center gap-2">
-                        <span>📋</span> Cédula: {emp.cedula}
+                        <IdCard size={16} /> Cedula: {emp.cedula}
                       </p>
                       <p className="flex items-center gap-2">
                         <Mail size={16} /> Email: {emp.email}
                       </p>
                       <p className="flex items-center gap-2">
-                        <Phone size={16} /> Teléfono: {emp.telefono}
+                        <Phone size={16} /> Telefono: {emp.telefono}
                       </p>
                       <p className="flex items-center gap-2">
                         <User size={16} /> Rol: <span className="font-semibold text-purple-300">{emp.rol.toUpperCase()}</span>
@@ -205,10 +205,10 @@ export default function PanelAdmin() {
 
                 {emp.rol === 'mesero' && emp.usuario_fudo && (
                   <div className="bg-purple-500/20 border border-purple-500 rounded-lg p-4 mb-4">
-                    <p className="text-white font-semibold mb-2">📧 Credenciales FUDO:</p>
+                    <p className="text-white font-semibold mb-2">Credenciales FUDO:</p>
                     <div className="font-mono text-sm text-white/90 space-y-1">
                       <p>Usuario: <span className="text-purple-300">{emp.usuario_fudo}</span></p>
-                      <p>Contraseña: <span className="text-purple-300">{emp.password_fudo}</span></p>
+                      <p>Contrasena: <span className="text-purple-300">{emp.password_fudo}</span></p>
                     </div>
                   </div>
                 )}
@@ -218,13 +218,13 @@ export default function PanelAdmin() {
                     onClick={() => aprobarEmpleado(emp)}
                     className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-semibold"
                   >
-                    ✅ Aprobar
+                    Aprobar
                   </button>
                   <button
                     onClick={() => rechazarEmpleado(emp.id)}
                     className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg font-semibold"
                   >
-                    ❌ Rechazar
+                    Rechazar
                   </button>
                 </div>
               </div>
