@@ -70,7 +70,7 @@ export default function RegistroEmpleado() {
             </div>
           )}
 
-          
+          <a
             href="/"
             className="block w-full bg-purple-600 hover:bg-purple-700 text-white text-center py-3 rounded-lg font-semibold transition-colors"
           >
@@ -175,7 +175,7 @@ export default function RegistroEmpleado() {
             Enviar Solicitud
           </button>
 
-          
+          <a
             href="/"
             className="block w-full text-center bg-white/10 hover:bg-white/20 text-white py-3 rounded-lg font-semibold transition-colors"
           >
