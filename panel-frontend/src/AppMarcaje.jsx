@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Camera, MapPin, Clock, CheckCircle, XCircle, AlertTriangle, User, LogIn, LogOut, Wifi, WifiOff } from 'lucide-react';
+import { Camera, MapPin, Clock, CheckCircle, XCircle, User, LogIn, LogOut, Wifi, WifiOff } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 
 export default function AppMarcaje() {
@@ -9,7 +9,6 @@ export default function AppMarcaje() {
   const [selectedEmployee, setSelectedEmployee] = useState('');
   const [employees, setEmployees] = useState([]);
   const [marcajeType, setMarcajeType] = useState('entrada');
-  const [location, setLocation] = useState(null);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
