@@ -67,7 +67,7 @@ export default function LoginAdmin({ onLoginSuccess }) {
           </form>
 
           <div className="mt-6 pt-6 border-t border-white/20">
-            
+            <a
               href="/"
               className="block text-center text-white/70 hover:text-white text-sm"
             >
