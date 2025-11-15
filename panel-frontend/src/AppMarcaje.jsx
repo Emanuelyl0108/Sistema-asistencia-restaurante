@@ -110,8 +110,7 @@ export default function AppMarcaje() {
 
     try {
       const loc = await getLocation();
-      setLocation(loc);
-
+      
       const response = await fetch(`${API_URL}/marcar`, {
         method: 'POST',
         headers: {
@@ -158,7 +157,6 @@ export default function AppMarcaje() {
     setQrToken('');
     setSelectedEmployee('');
     setResult(null);
-    setLocation(null);
     setLastMarcajes([]);
   };
 
