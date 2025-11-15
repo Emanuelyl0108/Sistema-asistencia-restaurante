@@ -9,11 +9,10 @@ export default function LoginAdmin({ onLoginSuccess }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     
-    // Contraseña hardcodeada (cambiar en producción)
     if (password === 'admin2025') {
       onLoginSuccess();
     } else {
-      setError('❌ Contraseña incorrecta');
+      setError('Contrasena incorrecta');
       setPassword('');
     }
   };
@@ -32,14 +31,14 @@ export default function LoginAdmin({ onLoginSuccess }) {
         <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 border border-white/20">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="block text-white mb-2">Contraseña de Administrador</label>
+              <label className="block text-white mb-2">Contrasena de Administrador</label>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full px-4 py-3 rounded-lg bg-white/20 text-white placeholder-white/50 border border-white/30 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  placeholder="••••••••"
+                  placeholder="Ingrese contrasena"
                   required
                   autoFocus
                 />
@@ -72,7 +71,7 @@ export default function LoginAdmin({ onLoginSuccess }) {
               href="/"
               className="block text-center text-white/70 hover:text-white text-sm"
             >
-              ← Volver al inicio
+              Volver al inicio
             </a>
           </div>
         </div>
