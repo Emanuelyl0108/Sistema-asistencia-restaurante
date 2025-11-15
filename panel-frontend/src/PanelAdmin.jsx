@@ -1,17 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { User, Clock, Users, TrendingUp, LogOut, CheckCircle, Mail, Phone, IdCard } from 'lucide-react';
+import LoginAdmin from './LoginAdmin';
 
 const API_URL = process.env.REACT_APP_API_URL || 'https://asistencia-backend-uu7p.onrender.com/api';
 
 export default function PanelAdmin() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [seccion, setSeccion] = useState('dashboard');
   const [marcajes, setMarcajes] = useState([]);
   const [pendientes, setPendientes] = useState([]);
   const [stats, setStats] = useState({});
 
   useEffect(() => {
-    cargarDatos();
-  }, []);
+    if (isAuthenticated) {
+      cargarDatos();
+    }
+  }, [isAuthenticated]);
 
   const cargarDatos = async () => {
     try {
@@ -59,6 +63,17 @@ export default function PanelAdmin() {
     }
   };
 
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setSeccion('dashboard');
+  };
+
+  // Mostrar login si no está autenticado
+  if (!isAuthenticated) {
+    return <LoginAdmin onLoginSuccess={() => setIsAuthenticated(true)} />;
+  }
+
+  // Panel admin normal
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-6">
       <div className="flex justify-between items-center mb-8">
@@ -66,13 +81,13 @@ export default function PanelAdmin() {
           <h1 className="text-3xl font-bold text-white">Panel de Administrador</h1>
           <p className="text-purple-300">Gestion de asistencias</p>
         </div>
-        <a
-          href="/"
+        <button
+          onClick={handleLogout}
           className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg"
         >
           <LogOut size={20} />
-          Volver
-        </a>
+          Cerrar Sesion
+        </button>
       </div>
 
       <div className="flex gap-4 mb-6">
@@ -150,21 +165,29 @@ export default function PanelAdmin() {
                 </tr>
               </thead>
               <tbody>
-                {marcajes.map((m, idx) => (
-                  <tr key={idx} className="border-b border-white/10 hover:bg-white/5">
-                    <td className="py-3 px-4">{m.empleado_nombre}</td>
-                    <td className="py-3 px-4">
-                      <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                        m.tipo === 'entrada' ? 'bg-green-500' : 'bg-red-500'
-                      }`}>
-                        {m.tipo.toUpperCase()}
-                      </span>
+                {marcajes.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" className="text-center py-8 text-white/50">
+                      No hay marcajes registrados
                     </td>
-                    <td className="py-3 px-4">{m.fecha}</td>
-                    <td className="py-3 px-4">{m.hora}</td>
-                    <td className="py-3 px-4">{m.distancia_metros}m</td>
                   </tr>
-                ))}
+                ) : (
+                  marcajes.map((m, idx) => (
+                    <tr key={idx} className="border-b border-white/10 hover:bg-white/5">
+                      <td className="py-3 px-4">{m.empleado_nombre}</td>
+                      <td className="py-3 px-4">
+                        <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                          m.tipo === 'entrada' ? 'bg-green-500' : 'bg-red-500'
+                        }`}>
+                          {m.tipo.toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">{m.fecha}</td>
+                      <td className="py-3 px-4">{m.hora}</td>
+                      <td className="py-3 px-4">{m.distancia_metros}m</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
