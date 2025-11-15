@@ -596,6 +596,43 @@ def marcar_asistencia():
         'distancia': f'{distancia:.0f}m'
     })
 
+@app.route('/api/marcajes/hoy', methods=['GET', 'OPTIONS'])
+def marcajes_hoy():
+    """Obtener marcajes del día actual"""
+    if request.method == 'OPTIONS':
+        return '', 204
+    
+    conn = get_db_connection()
+    hoy = datetime.date.today().strftime('%Y-%m-%d')
+    
+    marcajes = conn.execute(
+        "SELECT * FROM marcajes WHERE fecha = ? ORDER BY timestamp DESC",
+        (hoy,)
+    ).fetchall()
+    
+    conn.close()
+    
+    return jsonify([dict(m) for m in marcajes])
+
+@app.route('/api/marcajes/empleado/<nombre>', methods=['GET', 'OPTIONS'])
+def marcajes_empleado(nombre):
+    """Obtener marcajes de un empleado (últimos 30 días)"""
+    if request.method == 'OPTIONS':
+        return '', 204
+    
+    conn = get_db_connection()
+    
+    hace_30_dias = (datetime.date.today() - datetime.timedelta(days=30)).strftime('%Y-%m-%d')
+    
+    marcajes = conn.execute(
+        "SELECT * FROM marcajes WHERE empleado_nombre = ? AND fecha >= ? ORDER BY timestamp DESC",
+        (nombre, hace_30_dias)
+    ).fetchall()
+    
+    conn.close()
+    
+    return jsonify([dict(m) for m in marcajes])
+
 # ==================== ENDPOINT INTEGRACIÓN NÓMINA ====================
 
 @app.route('/api/turnos/quincena', methods=['GET', 'OPTIONS'])
