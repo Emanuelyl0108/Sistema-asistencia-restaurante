@@ -679,6 +679,77 @@ def calcular_turnos_quincena():
         'detalle': dias_trabajados
     })
 
+# ==================== MIGRACIÓN DE EMPLEADOS ====================
+
+@app.route('/api/admin/migrar-empleados', methods=['POST', 'OPTIONS'])
+def migrar_empleados_csv():
+    """Migrar empleados desde empleados.csv a SQLite"""
+    if request.method == 'OPTIONS':
+        return '', 204
+    
+    try:
+        # Leer CSV
+        df = pd.read_csv('empleados.csv')
+        
+        conn = get_db_connection()
+        migrados = 0
+        errores = []
+        
+        for _, row in df.iterrows():
+            nombre = str(row['nombre']).strip()
+            
+            # Generar cédula si no existe
+            cedula_raw = row.get('id', '')
+            if pd.isna(cedula_raw) or str(cedula_raw).strip() == '':
+                cedula = f"CED-{nombre.replace(' ', '')[:10]}"
+            else:
+                cedula = str(cedula_raw).strip()
+            
+            estado = str(row['estado']).strip().upper()
+            
+            # Solo migrar empleados ACTIVOS
+            if estado == 'ACTIVO':
+                try:
+                    conn.execute('''
+                        INSERT INTO empleados 
+                        (nombre, cedula, email, telefono, rol, estado, fecha_registro, fecha_aprobacion, aprobado_por)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        nombre,
+                        cedula,
+                        f"{nombre.lower().replace(' ', '.')}@temp.com",
+                        "300-000-0000",
+                        "general",
+                        "ACTIVO",
+                        datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        "migracion_csv"
+                    ))
+                    migrados += 1
+                    print(f"✅ Migrado: {nombre}")
+                except sqlite3.IntegrityError as e:
+                    errores.append(f"{nombre}: Ya existe (cédula duplicada)")
+                    print(f"⚠️  Ya existe: {nombre}")
+                except Exception as e:
+                    errores.append(f"{nombre}: {str(e)}")
+                    print(f"❌ Error con {nombre}: {e}")
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'migrados': migrados,
+            'total_activos': len(df[df['estado'].str.upper() == 'ACTIVO']),
+            'errores': errores
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 # ==================== SERVIR FRONTEND ====================
 
 @app.route('/', defaults={'path': ''})
